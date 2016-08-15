@@ -83,7 +83,7 @@ namespace Microsoft.DocAsCode.Build.Engine
                     _canIncremental = GetCanIncremental(parameters.VersionName);
                     if (_canIncremental)
                     {
-                        ExpandDependency(parameters.ChangeList, LastBuildInfo, context.ChangeDict);
+                        ExpandDependency(parameters, LastBuildInfo, context.ChangeDict);
                     }
                 }
 
@@ -198,9 +198,68 @@ namespace Microsoft.DocAsCode.Build.Engine
             return LastBuildInfo.Versions.Any(v => v.VersionName == versionName);
         }
 
-        private void ExpandDependency(ChangeList changeList, BuildInfo lastBuildInfo, Dictionary<string, ChangeKindWithDependency> changeItems)
+        private void ExpandDependency(DocumentBuildParameters parameter, BuildInfo lastBuildInfo, Dictionary<string, ChangeKindWithDependency> changeItems)
         {
-            // todo ExpandDependency;
+            string versionName = parameter.VersionName;
+            string dependencyFile = lastBuildInfo.Versions.SingleOrDefault(v => v.VersionName == versionName)?.Dependency;
+
+            if (changeItems == null)
+            {
+                changeItems = new Dictionary<string, ChangeKindWithDependency>();
+            }
+            foreach (var item in parameter.ChangeList.Changes)
+            {
+                changeItems[item.FilePath] = item.Kind;
+            }
+            if (!string.IsNullOrEmpty(dependencyFile))
+            {
+                using (var reader = new StreamReader(Path.Combine(IntermediateFolder, dependencyFile)))
+                {
+                    var dependencyGraph = DependencyGraph.Load(reader);
+                    var topologicalList = GetTopologicalSortedItems(dependencyGraph);
+                    foreach (var node in topologicalList)
+                    {
+                        if (dependencyGraph.GetDirectDependency(node).Any(d => changeItems.ContainsKey(d) && changeItems[d] != ChangeKindWithDependency.None))
+                        {
+                            if (changeItems.ContainsKey(node))
+                            {
+                                changeItems[node] |= ChangeKindWithDependency.DependencyUpdated;
+                            }
+                            else
+                            {
+                                changeItems[node] = ChangeKindWithDependency.DependencyUpdated;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// use DFS to get topological sorted items
+        /// </summary>
+        private static IEnumerable<string> GetTopologicalSortedItems(DependencyGraph graph)
+        {
+            var visited = new HashSet<string>();
+            var result = new List<string>();
+            foreach (var node in graph.Keys)
+            {
+                DepthFirstTraverse(graph, node, visited, result);
+            }
+            return result;
+        }
+
+        private static void DepthFirstTraverse(DependencyGraph graph, string start, HashSet<string> visited, List<string> result)
+        {
+            if (!visited.Add(start))
+            {
+                return;
+            }
+            foreach (var presequisite in graph.GetDirectDependency(start))
+            {
+                DepthFirstTraverse(graph, presequisite, visited, result);
+            }
+            result.Add(start);
         }
 
         private void UpdateUidDependency(DocumentBuildContext context, List<HostService> hostServices)

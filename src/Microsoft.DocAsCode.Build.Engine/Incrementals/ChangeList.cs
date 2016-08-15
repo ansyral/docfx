@@ -4,6 +4,7 @@
 namespace Microsoft.DocAsCode.Build.Engine.Incrementals
 {
     using System;
+    using System.Collections;
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
@@ -48,6 +49,11 @@ namespace Microsoft.DocAsCode.Build.Engine.Incrementals
                 throw new ArgumentException("Expect relative path.", nameof(filePath));
             }
             AddCore(filePath, kind);
+        }
+
+        internal IReadOnlyList<ChangeItem> Changes
+        {
+            get { return _list; }
         }
 
         public IEnumerable<string> GetCreatedFiles() =>

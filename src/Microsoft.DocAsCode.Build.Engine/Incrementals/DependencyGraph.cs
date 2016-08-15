@@ -5,6 +5,7 @@ namespace Microsoft.DocAsCode.Build.Engine
 {
     using System.Collections.Generic;
     using System.IO;
+    using System.Linq;
 
     using Microsoft.DocAsCode.Common;
 
@@ -51,6 +52,18 @@ namespace Microsoft.DocAsCode.Build.Engine
         public bool HasDependency(string key)
         {
             return _dictionary.ContainsKey(key);
+        }
+
+        public IEnumerable<string> Keys
+        {
+            get { return _dictionary.Keys; }
+        }
+
+        public SortedSet<string> GetDirectDependency(string key)
+        {
+            SortedSet<string> deps;
+            _dictionary.TryGetValue(key, out deps);
+            return deps;
         }
 
         public SortedSet<string> GetAllDependency(string key)
