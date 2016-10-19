@@ -72,7 +72,7 @@ namespace Microsoft.DocAsCode.Build.Common
                                                    HttpUtility.UrlDecode(link.Remove(index)),
                                                    link.Substring(index))).ToList();
                     var anchors = GetNodeAttribute(html, "id").Concat(GetNodeAttribute(html, "name"));
-                    registeredBookmarks[relativePath] = new HashSet<string>(anchors, StringComparer.OrdinalIgnoreCase);
+                    registeredBookmarks[relativePath] = new HashSet<string>(anchors);
                 }
             }
 
