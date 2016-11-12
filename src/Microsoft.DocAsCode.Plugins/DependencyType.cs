@@ -3,12 +3,17 @@
 
 namespace Microsoft.DocAsCode.Plugins
 {
+    using System;
+
     public class DependencyType
     {
         public string Name { get; set; }
 
         public bool IsTransitive { get; set; }
 
+        [Obsolete]
         public bool TriggerBuild { get; set; }
+
+        public TriggerBuildPhase TriggerBuildPhase { get; set; }
     }
 }

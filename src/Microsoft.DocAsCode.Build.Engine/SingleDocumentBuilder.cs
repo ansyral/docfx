@@ -104,7 +104,7 @@ namespace Microsoft.DocAsCode.Build.Engine
                         LoadChanges(parameters, context);
                         Logger.LogVerbose($"Before expanding dependency before build, changes: {JsonUtility.Serialize(context.ChangeDict, Formatting.Indented)}");
                         var dependencyGraph = lbv.Dependency;
-                        ExpandDependency(dependencyGraph, context, d => dependencyGraph.DependencyTypes[d.Type].TriggerBuild);
+                        ExpandDependency(dependencyGraph, context, d => dependencyGraph.DependencyTypes[d.Type].TriggerBuildPhase == TriggerBuildPhase.Build);
                         Logger.LogVerbose($"After expanding dependency before build, changes: {JsonUtility.Serialize(context.ChangeDict, Formatting.Indented)}");
                     }
                 }
@@ -551,7 +551,7 @@ namespace Microsoft.DocAsCode.Build.Engine
             UpdateUidDependency(hostServices, context);
             if (canIncremental && intermediateFolder != null && lmm != null)
             {
-                var newChanges = ExpandDependency(context.DependencyGraph, context, d => true);
+                var newChanges = ExpandDependency(context.DependencyGraph, context, d => context.DependencyGraph.DependencyTypes[d.Type].TriggerBuildPhase == TriggerBuildPhase.PostBuild);
                 Logger.LogDiagnostic($"After expanding dependency before postbuild, changes: {JsonUtility.Serialize(context.ChangeDict)}");
                 foreach (var hostService in hostServices)
                 {
