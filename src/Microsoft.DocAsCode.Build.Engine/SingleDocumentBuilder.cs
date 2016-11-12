@@ -362,6 +362,27 @@ namespace Microsoft.DocAsCode.Build.Engine
             }
         }
 
+        private static void UpdateFileDependency(IEnumerable<HostService> hostServices, DocumentBuildContext context)
+        {
+            foreach (var hostService in hostServices)
+            {
+                foreach (var m in hostService.Models)
+                {
+                    if (m.Type == DocumentType.Overwrite)
+                    {
+                        continue;
+                    }
+                    if (m.LinkToFiles.Count != 0)
+                    {
+                        string fromNode = ((TypeForwardedToRelativePath)m.OriginalFileAndType.File).GetPathFromWorkingFolder().ToString();
+                        var dps = from f in m.LinkToFiles
+                                  select new DependencyItem(fromNode, f, fromNode, DependencyTypeName.File);
+                        context.DependencyGraph.ReportDependency(dps);
+                    }
+                }
+            }
+        }
+
         private static IEnumerable<string> GetFilesFromUids(DocumentBuildContext context, IEnumerable<string> uids)
         {
             foreach (var uid in uids)
@@ -546,16 +567,23 @@ namespace Microsoft.DocAsCode.Build.Engine
             }
         }
 
-        private static void UpdateHostServices(IEnumerable<HostService> hostServices, DocumentBuildContext context, string intermediateFolder, ModelManifest lmm, bool canIncremental)
+        private static void UpdateHostServices(IEnumerable<HostService> hostServices, DocumentBuildContext context, string intermediateFolder, ModelManifest lmm, bool canIncremental, TriggerBuildPhase phase)
         {
-            UpdateUidDependency(hostServices, context);
+            if (phase == TriggerBuildPhase.PostBuild)
+            {
+                UpdateUidDependency(hostServices, context);
+            }
+            else if (phase == TriggerBuildPhase.ApplyTemplates)
+            {
+                UpdateFileDependency(hostServices, context);
+            }
             if (canIncremental && intermediateFolder != null && lmm != null)
             {
-                var newChanges = ExpandDependency(context.DependencyGraph, context, d => context.DependencyGraph.DependencyTypes[d.Type].TriggerBuildPhase == TriggerBuildPhase.PostBuild);
+                var newChanges = ExpandDependency(context.DependencyGraph, context, d => context.DependencyGraph.DependencyTypes[d.Type].TriggerBuildPhase == phase);
                 Logger.LogDiagnostic($"After expanding dependency before postbuild, changes: {JsonUtility.Serialize(context.ChangeDict)}");
                 foreach (var hostService in hostServices)
                 {
-                    hostService.ReloadModelsPerIncrementalChanges(newChanges, intermediateFolder, lmm, LoadPhase.PostBuild);
+                    hostService.ReloadModelsPerIncrementalChanges(newChanges, intermediateFolder, lmm, phase == TriggerBuildPhase.PostBuild ? LoadPhase.PostBuild : LoadPhase.PostPostBuild);
                 }
             }
         }

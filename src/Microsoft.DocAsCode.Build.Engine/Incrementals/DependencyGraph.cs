@@ -28,6 +28,12 @@ namespace Microsoft.DocAsCode.Build.Engine.Incrementals
                 Name = DependencyTypeName.Uid,
                 IsTransitive = false,
                 TriggerBuildPhase = TriggerBuildPhase.PostBuild,
+            },
+            new DependencyType
+            {
+                Name = DependencyTypeName.File,
+                IsTransitive = false,
+                TriggerBuildPhase = TriggerBuildPhase.ApplyTemplates,
             });
 
         private readonly HashSet<DependencyItem> _dependencyItems;
