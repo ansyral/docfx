@@ -74,7 +74,21 @@ namespace Microsoft.DocAsCode.Build.Engine
                     globals = Tokens.ToDictionary(pair => pair.Key, pair => (object)pair.Value);
                 }
 
-                var documentTypes = manifest.Select(s => s.DocumentType).Distinct();
+                var incrementalContext = context.IncrementalBuildContext;
+                var lbv = incrementalContext?.LastBuildVersionInfo;
+                var lm = lbv?.Manifest;
+                IEnumerable<ManifestItem> unloadedManifestItems = Enumerable.Empty<ManifestItem>();
+                if (lm != null)
+                {
+                    unloadedManifestItems = (from m in incrementalContext.ModelLoadInfo
+                                             from pair in m
+                                             where pair.Value == LoadPhase.None
+                                             select pair.Key.File into f
+                                             from mani in lm
+                                             where f == mani.SourceRelativePath
+                                             select mani).ToList();
+                }
+                var documentTypes = manifest.Select(s => s.DocumentType).Concat(unloadedManifestItems.Select(u => u.DocumentType)).Distinct();
                 var notSupportedDocumentTypes = documentTypes.Where(s => s != "Resource" && _templateCollection[s] == null);
                 if (notSupportedDocumentTypes.Any())
                 {
@@ -93,6 +107,8 @@ namespace Microsoft.DocAsCode.Build.Engine
                 }
 
                 var templateManifest = ProcessCore(manifest, context, settings, globals);
+
+                // to-do: save manifestitems
                 return templateManifest;
             }
         }

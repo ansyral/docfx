@@ -1164,6 +1164,11 @@ namespace Microsoft.DocAsCode.Build.Engine
                     CanIncrementalBuild = processorCanIncremental,
                 };
 
+                if (ShouldTraceIncrementalInfo)
+                {
+                    incrementalContext.ModelLoadInfo.Add(hostService.ModelLoadInfo);
+                }
+
                 if (processorSupportIncremental)
                 {
                     hostService.CurrentIntermediateModelManifest = cpi.IntermediateModelManifest;

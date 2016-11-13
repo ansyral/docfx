@@ -4,9 +4,11 @@
 namespace Microsoft.DocAsCode.Build.Engine.Incrementals
 {
     using System;
+    using System.Collections.Generic;
     using System.Linq;
 
     using Microsoft.DocAsCode.Common;
+    using Microsoft.DocAsCode.Plugins;
 
     public class IncrementalBuildContext
     {
@@ -27,6 +29,9 @@ namespace Microsoft.DocAsCode.Build.Engine.Incrementals
                 return _parameters.VersionName;
             }
         }
+
+        // the mapping from model's localpathfromroot to the model's loadphase
+        internal List<Dictionary<FileAndType, LoadPhase>> ModelLoadInfo { get; set; } = new List<Dictionary<FileAndType, LoadPhase>>();
 
         public IncrementalBuildContext(DocumentBuildParameters parameters, BuildVersionInfo cbv, BuildVersionInfo lbv, bool canBuildInfoIncremental)
         {
