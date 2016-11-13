@@ -506,7 +506,7 @@ namespace Microsoft.DocAsCode.Build.Engine
             }
         }
 
-        public void ReloadModelsPerIncrementalChanges(IEnumerable<string> changes, string intermediateFolder, ModelManifest lmm, LoadPhase phase)
+        public void ReloadModelsPerIncrementalChanges(IEnumerable<string> changes, string intermediateFolder, LoadPhase phase)
         {
             if (changes == null)
             {
@@ -534,7 +534,7 @@ namespace Microsoft.DocAsCode.Build.Engine
             }
             var toLoadList = (from f in ModelLoadInfo.Keys
                               where condition(f)
-                              select LoadIntermediateModel(f.File) into m
+                              select LoadIntermediateModel(f.File, phase.ToString()) into m
                               where m != null
                               select m).ToList();
             if (toLoadList.Count > 0)
@@ -544,7 +544,7 @@ namespace Microsoft.DocAsCode.Build.Engine
             }
         }
 
-        public void SaveIntermediateModel()
+        public void SaveIntermediateModel(string phase)
         {
             if (!ShouldTraceIncrementalInfo)
             {
@@ -557,6 +557,7 @@ namespace Microsoft.DocAsCode.Build.Engine
                 IncrementalUtility.RetryIO(() =>
                 {
                     string fileName = IncrementalUtility.GetRandomEntry(IncrementalBaseDir);
+                    string key = GetIntermediateModelKey(pair.Key.File, phase);
                     if (pair.Value == LoadPhase.None)
                     {
                         if (LastIntermediateModelManifest == null)
@@ -564,27 +565,27 @@ namespace Microsoft.DocAsCode.Build.Engine
                             throw new BuildCacheException($"Full build hasn't loaded model {pair.Key.FullPath}");
                         }
                         string lfn;
-                        if (!LastIntermediateModelManifest.Models.TryGetValue(pair.Key.File, out lfn))
+                        if (!LastIntermediateModelManifest.Models.TryGetValue(key, out lfn))
                         {
-                            throw new BuildCacheException($"Last build hasn't loaded model {pair.Key.FullPath}");
+                            throw new BuildCacheException($"Last build hasn't loaded model {pair.Key.FullPath} with phase {phase}.");
                         }
                         File.Move(Path.Combine(LastIncrementalBaseDir, lfn), Path.Combine(IncrementalBaseDir, fileName));
                     }
                     else
                     {
-                        var key = TypeForwardedToRelativePath.NormalizedWorkingFolder + pair.Key.File;
-                        var model = Models.Find(m => m.Key == key);
+                        var modelKey = TypeForwardedToRelativePath.NormalizedWorkingFolder + pair.Key.File;
+                        var model = Models.Find(m => m.Key == modelKey);
                         using (var stream = File.Create(Path.Combine(IncrementalBaseDir, fileName)))
                         {
                             processor.SaveIntermediateModel(model, stream);
                         }
                     }
-                    CurrentIntermediateModelManifest.Models.Add(pair.Key.File, fileName);
+                    CurrentIntermediateModelManifest.Models.Add(key, fileName);
                 });
             }
         }
 
-        public FileModel LoadIntermediateModel(string fileName)
+        public FileModel LoadIntermediateModel(string fileName, string phase)
         {
             if (!CanIncrementalBuild)
             {
@@ -592,9 +593,10 @@ namespace Microsoft.DocAsCode.Build.Engine
             }
             var processor = (ISupportIncrementalDocumentProcessor)Processor;
             string cfn;
-            if (!CurrentIntermediateModelManifest.Models.TryGetValue(fileName, out cfn))
+            string key = GetIntermediateModelKey(fileName, phase);
+            if (!CurrentIntermediateModelManifest.Models.TryGetValue(key, out cfn))
             {
-                throw new BuildCacheException($"Last build hasn't loaded model {fileName}");
+                throw new BuildCacheException($"Last build hasn't loaded model {fileName} with phase {phase}.");
             }
             using (var stream = File.OpenRead(Path.Combine(IncrementalBaseDir, cfn)))
             {
@@ -717,6 +719,11 @@ namespace Microsoft.DocAsCode.Build.Engine
         private void ReportDependencyCore(string from, string to, string reportedBy, string type)
         {
             DependencyGraph.ReportDependency(new DependencyItem(from, to, reportedBy, type));
+        }
+
+        private string GetIntermediateModelKey(string fileName, string phase)
+        {
+            return $"{fileName}|{phase}";
         }
 
         #endregion

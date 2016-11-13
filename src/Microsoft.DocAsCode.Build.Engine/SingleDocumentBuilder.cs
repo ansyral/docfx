@@ -450,18 +450,18 @@ namespace Microsoft.DocAsCode.Build.Engine
                 }
             }
 
-            Action<HostService> buildSaver = null;
-            Action<List<HostService>> loader = null;
+            Action<HostService, string> buildSaver = null;
+            Action<List<HostService>, TriggerBuildPhase> loader = null;
             Action updater = null;
             if (ShouldTraceIncrementalInfo)
             {
                 var incrementalContext = context.IncrementalBuildContext;
                 var lbv = incrementalContext.LastBuildVersionInfo;
                 var cbv = incrementalContext.CurrentBuildVersionInfo;
-                buildSaver = h => h.SaveIntermediateModel();
-                loader = hs =>
+                buildSaver = (h, phase) => h.SaveIntermediateModel(phase);
+                loader = (hs, phase) =>
                 {
-                    UpdateHostServices(hostServices);
+                    UpdateHostServices(hostServices, context, IntermediateFolder, incrementalContext.CanVersionIncremental, phase);
                     if (lbv != null)
                     {
                         foreach (var h in hs)
@@ -499,7 +499,7 @@ namespace Microsoft.DocAsCode.Build.Engine
                    select m;
         }
 
-        private static void BuildCore(List<HostService> hostServices, int maxParallelism, Action<HostService> buildSaver, Action<List<HostService>> loader, Action updater)
+        private static void BuildCore(List<HostService> hostServices, int maxParallelism, Action<HostService, string> buildSaver, Action<List<HostService>, TriggerBuildPhase> loader, Action updater)
         {
             // prebuild and build
             foreach (var hostService in hostServices)
@@ -520,12 +520,12 @@ namespace Microsoft.DocAsCode.Build.Engine
                     }
 
                     // save models
-                    buildSaver?.Invoke(hostService);
+                    buildSaver?.Invoke(hostService, LoadPhase.PostBuild.ToString());
                 }
             }
 
-            // load all unloaded models(to-do: load models according to changes)
-            loader?.Invoke(hostServices);
+            // load models according to changes
+            loader?.Invoke(hostServices, TriggerBuildPhase.PostBuild);
 
             // postbuild
             foreach (var hostService in hostServices)
@@ -537,11 +537,16 @@ namespace Microsoft.DocAsCode.Build.Engine
                     {
                         Postbuild(hostService);
                     }
+
+                    // save models
+                    buildSaver?.Invoke(hostService, LoadPhase.PostPostBuild.ToString());
                 }
             }
 
             // update Attributes
             updater?.Invoke();
+
+            loader?.Invoke(hostServices, TriggerBuildPhase.ApplyTemplates);
         }
 
         private static void UpdateBuildVersionInfoPerDependencyGraph(BuildVersionInfo bvi)
@@ -567,7 +572,7 @@ namespace Microsoft.DocAsCode.Build.Engine
             }
         }
 
-        private static void UpdateHostServices(IEnumerable<HostService> hostServices, DocumentBuildContext context, string intermediateFolder, ModelManifest lmm, bool canIncremental, TriggerBuildPhase phase)
+        private static void UpdateHostServices(IEnumerable<HostService> hostServices, DocumentBuildContext context, string intermediateFolder, bool canIncremental, TriggerBuildPhase phase)
         {
             if (phase == TriggerBuildPhase.PostBuild)
             {
@@ -577,13 +582,13 @@ namespace Microsoft.DocAsCode.Build.Engine
             {
                 UpdateFileDependency(hostServices, context);
             }
-            if (canIncremental && intermediateFolder != null && lmm != null)
+            if (canIncremental && intermediateFolder != null)
             {
                 var newChanges = ExpandDependency(context.DependencyGraph, context, d => context.DependencyGraph.DependencyTypes[d.Type].TriggerBuildPhase == phase);
                 Logger.LogDiagnostic($"After expanding dependency before postbuild, changes: {JsonUtility.Serialize(context.ChangeDict)}");
                 foreach (var hostService in hostServices)
                 {
-                    hostService.ReloadModelsPerIncrementalChanges(newChanges, intermediateFolder, lmm, phase == TriggerBuildPhase.PostBuild ? LoadPhase.PostBuild : LoadPhase.PostPostBuild);
+                    hostService.ReloadModelsPerIncrementalChanges(newChanges, intermediateFolder, phase == TriggerBuildPhase.PostBuild ? LoadPhase.PostBuild : LoadPhase.PostPostBuild);
                 }
             }
         }
