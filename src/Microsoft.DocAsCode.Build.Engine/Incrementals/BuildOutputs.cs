@@ -10,6 +10,6 @@ namespace Microsoft.DocAsCode.Build.Engine.Incrementals
         /// <summary>
         /// The items of output.
         /// </summary>
-        public List<BuildOutputItem> Items { get; set; }
+        public Dictionary<string, string> Items { get; } = new Dictionary<string, string>();
     }
 }

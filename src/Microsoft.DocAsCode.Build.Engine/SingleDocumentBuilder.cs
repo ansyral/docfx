@@ -90,14 +90,17 @@ namespace Microsoft.DocAsCode.Build.Engine
                         ManifestFile = IncrementalUtility.CreateRandomFileName(baseDir),
                         XRefSpecMapFile = IncrementalUtility.CreateRandomFileName(baseDir),
                         BuildMessageFile = IncrementalUtility.CreateRandomFileName(baseDir),
+                        OutputFile = IncrementalUtility.CreateRandomFileName(baseDir),
                         Attributes = ComputeFileAttributes(parameters, lbv?.Dependency),
                         Dependency = context.DependencyGraph,
+                        Manifest = context.ManifestItems,
                     };
                     CurrentBuildInfo.Versions.Add(cbv);
                     Logger.RegisterListener(cbv.BuildMessage.GetListener());
                     context.IncrementalBuildContext = new IncrementalBuildContext(parameters, cbv, lbv, CanBuildInfoIncremental())
                     {
                         BaseDir = baseDir,
+                        LastBaseDir = LastBuildInfo != null ? Path.Combine(IntermediateFolder, LastBuildInfo.DirectoryName) : null,
                     };
                     if (context.IncrementalBuildContext.CanVersionIncremental)
                     {
@@ -166,8 +169,22 @@ namespace Microsoft.DocAsCode.Build.Engine
                             globalVariables = FeedGlobalVariables(processor.Tokens, manifest, context);
                         }
 
+                        if (ShouldTraceIncrementalInfo && context.IncrementalBuildContext.CanVersionIncremental)
+                        {
+                            var lbv = context.IncrementalBuildContext.LastBuildVersionInfo;
+                            var lm = lbv.Manifest;
+                            context.IncrementalBuildContext.UnloadedManifestItems = (from d in context.IncrementalBuildContext.ModelLoadInfo.Values
+                                                                                     from m in d
+                                                                                     where m.Value == LoadPhase.None
+                                                                                     select m.Key into f
+                                                                                     from mani in lm
+                                                                                     where f == mani.SourceRelativePath
+                                                                                     select mani).ToList();
+                        }
+
                         // processor to add global variable to the model
-                        foreach (var m in processor.Process(manifest.Select(s => s.Item).ToList(), context, parameters.ApplyTemplateSettings, globalVariables))
+                        ProcessTemplateDependencyWithIncrementalWrapper(context.IncrementalBuildContext, processor, parameters.ApplyTemplateSettings, new HashSet<string>(manifest.Select(s => s.Item.DocumentType)));
+                        foreach (var m in ApplyTemplateWithIncrementalWrapper(context.IncrementalBuildContext, processor, manifest.Select(s => s.Item).ToList(), context, parameters.ApplyTemplateSettings, globalVariables))
                         {
                             context.ManifestItems.Add(m);
                         }
@@ -190,7 +207,82 @@ namespace Microsoft.DocAsCode.Build.Engine
                             item.Dispose();
                         }
                     }
+                    if (ShouldTraceIncrementalInfo)
+                    {
+                        Logger.UnregisterListener(context.IncrementalBuildContext.CurrentBuildVersionInfo.BuildMessage.GetListener());
+                    }
                 }
+            }
+        }
+
+        private void ProcessTemplateDependencyWithIncrementalWrapper(IncrementalBuildContext incrementalContext, TemplateProcessor processor, ApplyTemplateSettings settings, HashSet<string> documentTypes)
+        {
+            if (!ShouldTraceIncrementalInfo || incrementalContext.UnloadedManifestItems.Count == 0)
+            {
+                processor.ProcessTemplateDependencies(settings, documentTypes);
+                return;
+            }
+            var types = new HashSet<string>(incrementalContext.UnloadedManifestItems.Select(m => m.DocumentType).Concat(documentTypes));
+            processor.ProcessTemplateDependencies(settings, types);
+        }
+
+        private List<ManifestItem> ApplyTemplateWithIncrementalWrapper(IncrementalBuildContext incrementalContext, TemplateProcessor processor, List<InternalManifestItem> manifest, DocumentBuildContext context, ApplyTemplateSettings settings, IDictionary<string, object> globals)
+        {
+            var result = processor.ApplyTemplates(manifest, context, settings, globals);
+            if (!ShouldTraceIncrementalInfo)
+            {
+                return result;
+            }
+            result.AddRange(incrementalContext.UnloadedManifestItems);
+            SaveManifest(incrementalContext, result, context.BuildOutputFolder);
+            foreach (var file in from p in incrementalContext.ModelLoadInfo.Values
+                                 from pair in p
+                                 where pair.Value == LoadPhase.None
+                                 select pair.Key)
+            {
+                incrementalContext.LastBuildVersionInfo.BuildMessage.Replay(file);
+            }
+            return result;
+        }
+
+        private void SaveManifest(IncrementalBuildContext incrementalContext, List<ManifestItem> manifest, string outputDirectory)
+        {
+            if (!ShouldTraceIncrementalInfo)
+            {
+                return;
+            }
+            var lo = incrementalContext.LastBuildVersionInfo?.BuildOutputs;
+            foreach (var item in from m in manifest
+                                 from output in m.OutputFiles.Values
+                                 select new
+                                 {
+                                     Path = Path.Combine(outputDirectory, output.RelativePath),
+                                     SourcePath = m.SourceRelativePath,
+                                 })
+            {
+                IncrementalUtility.RetryIO(() =>
+                {
+                    string fileName = IncrementalUtility.GetRandomEntry(incrementalContext.BaseDir);
+                    if (incrementalContext.ModelLoadInfo.Values.Single(d => d.ContainsKey(item.SourcePath))[item.SourcePath] == LoadPhase.None)
+                    {
+                        if (lo == null)
+                        {
+                            throw new BuildCacheException($"Full build hasn't loaded build outputs.");
+                        }
+                        string lfn;
+                        if (!lo.Items.TryGetValue(item.Path, out lfn))
+                        {
+                            throw new BuildCacheException($"Last build hasn't loaded output: {item.Path}.");
+                        }
+                        File.Move(Path.Combine(incrementalContext.LastBaseDir, lfn), Path.Combine(incrementalContext.BaseDir, fileName));
+                        File.Copy(Path.Combine(incrementalContext.BaseDir, fileName), item.Path, true);
+                    }
+                    else
+                    {
+                        File.Copy(item.Path, Path.Combine(incrementalContext.BaseDir, fileName));
+                    }
+                    incrementalContext.CurrentBuildVersionInfo.BuildOutputs.Items.Add(item.Path, fileName);
+                });
             }
         }
 
@@ -462,19 +554,19 @@ namespace Microsoft.DocAsCode.Build.Engine
                 loader = (hs, phase) =>
                 {
                     UpdateHostServices(hostServices, context, IntermediateFolder, incrementalContext.CanVersionIncremental, phase);
+                    LoadPhase loadPhase = phase == TriggerBuildPhase.PostBuild ? LoadPhase.PostBuild : LoadPhase.PostPostBuild;
                     if (lbv != null)
                     {
                         foreach (var h in hs)
                         {
                             foreach (var file in from pair in h.ModelLoadInfo
-                                                 where pair.Value > LoadPhase.None
+                                                 where pair.Value == loadPhase
                                                  select pair.Key)
                             {
-                                lbv.BuildMessage.Replay(file.File);
+                                lbv.BuildMessage.Replay(file);
                             }
                         }
                     }
-                    Logger.UnregisterListener(cbv.BuildMessage.GetListener());
                 };
                 updater = () =>
                 {
@@ -1166,7 +1258,7 @@ namespace Microsoft.DocAsCode.Build.Engine
 
                 if (ShouldTraceIncrementalInfo)
                 {
-                    incrementalContext.ModelLoadInfo.Add(hostService.ModelLoadInfo);
+                    incrementalContext.ModelLoadInfo[pair.processor.Name] = hostService.ModelLoadInfo;
                 }
 
                 if (processorSupportIncremental)

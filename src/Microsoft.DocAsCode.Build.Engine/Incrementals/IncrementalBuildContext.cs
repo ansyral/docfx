@@ -16,6 +16,8 @@ namespace Microsoft.DocAsCode.Build.Engine.Incrementals
 
         public string BaseDir { get; set; }
 
+        public string LastBaseDir { get; set; }
+
         public BuildVersionInfo CurrentBuildVersionInfo { get; set; }
 
         public BuildVersionInfo LastBuildVersionInfo { get; set; }
@@ -31,7 +33,9 @@ namespace Microsoft.DocAsCode.Build.Engine.Incrementals
         }
 
         // the mapping from model's localpathfromroot to the model's loadphase
-        internal List<Dictionary<FileAndType, LoadPhase>> ModelLoadInfo { get; set; } = new List<Dictionary<FileAndType, LoadPhase>>();
+        internal Dictionary<string, Dictionary<string, LoadPhase>> ModelLoadInfo { get; set; } = new Dictionary<string, Dictionary<string, LoadPhase>>();
+
+        internal List<ManifestItem> UnloadedManifestItems { get; set; } = new List<ManifestItem>();
 
         public IncrementalBuildContext(DocumentBuildParameters parameters, BuildVersionInfo cbv, BuildVersionInfo lbv, bool canBuildInfoIncremental)
         {

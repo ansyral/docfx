@@ -65,7 +65,7 @@ namespace Microsoft.DocAsCode.Build.Engine
             return true;
         }
 
-        internal List<ManifestItem> Process(List<InternalManifestItem> manifest, DocumentBuildContext context, ApplyTemplateSettings settings, IDictionary<string, object> globals = null)
+        internal List<ManifestItem> ApplyTemplates(List<InternalManifestItem> manifest, DocumentBuildContext context, ApplyTemplateSettings settings, IDictionary<string, object> globals = null)
         {
             using (new LoggerPhaseScope("Apply Templates", true))
             {
@@ -74,46 +74,36 @@ namespace Microsoft.DocAsCode.Build.Engine
                     globals = Tokens.ToDictionary(pair => pair.Key, pair => (object)pair.Value);
                 }
 
-                var incrementalContext = context.IncrementalBuildContext;
-                var lbv = incrementalContext?.LastBuildVersionInfo;
-                var lm = lbv?.Manifest;
-                IEnumerable<ManifestItem> unloadedManifestItems = Enumerable.Empty<ManifestItem>();
-                if (lm != null)
-                {
-                    unloadedManifestItems = (from m in incrementalContext.ModelLoadInfo
-                                             from pair in m
-                                             where pair.Value == LoadPhase.None
-                                             select pair.Key.File into f
-                                             from mani in lm
-                                             where f == mani.SourceRelativePath
-                                             select mani).ToList();
-                }
-                var documentTypes = manifest.Select(s => s.DocumentType).Concat(unloadedManifestItems.Select(u => u.DocumentType)).Distinct();
+                Logger.LogInfo($"Applying templates to {manifest.Count} model(s)...");
+
+                var templateManifest = ProcessCore(manifest, context, settings, globals);
+                return templateManifest;
+            }
+        }
+
+        internal void ProcessTemplateDependencies(ApplyTemplateSettings settings, HashSet<string> documentTypes)
+        {
+            using (new LoggerPhaseScope("Process Template Dependency", true))
+            {
                 var notSupportedDocumentTypes = documentTypes.Where(s => s != "Resource" && _templateCollection[s] == null);
                 if (notSupportedDocumentTypes.Any())
                 {
                     Logger.LogWarning($"There is no template processing document type(s): {TypeForwardedToStringExtension.ToDelimitedString(notSupportedDocumentTypes)}");
                 }
-                Logger.LogInfo($"Applying templates to {manifest.Count} model(s)...");
 
                 if (settings.Options.HasFlag(ApplyTemplateOptions.TransformDocument))
                 {
                     var templatesInUse = documentTypes.Select(s => _templateCollection[s]).Where(s => s != null).ToList();
-                    ProcessDependencies(settings.OutputFolder, templatesInUse);
+                    ProcessDependenciesCore(settings.OutputFolder, templatesInUse);
                 }
                 else
                 {
                     Logger.LogInfo("Dryrun, no template will be applied to the documents.");
                 }
-
-                var templateManifest = ProcessCore(manifest, context, settings, globals);
-
-                // to-do: save manifestitems
-                return templateManifest;
             }
         }
 
-        private void ProcessDependencies(string outputDirectory, IEnumerable<TemplateBundle> templateBundles)
+        private void ProcessDependenciesCore(string outputDirectory, IEnumerable<TemplateBundle> templateBundles)
         {
             foreach (var resourceInfo in templateBundles.SelectMany(s => s.Resources).Distinct())
             {

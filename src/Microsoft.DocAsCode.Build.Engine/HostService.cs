@@ -47,7 +47,7 @@ namespace Microsoft.DocAsCode.Build.Engine
 
         public DependencyGraph DependencyGraph { get; set; }
 
-        public Dictionary<FileAndType, LoadPhase> ModelLoadInfo { get; } = new Dictionary<FileAndType, LoadPhase>();
+        public Dictionary<string, LoadPhase> ModelLoadInfo { get; } = new Dictionary<string, LoadPhase>();
 
         public ModelManifest CurrentIntermediateModelManifest { get; set; }
 
@@ -495,7 +495,7 @@ namespace Microsoft.DocAsCode.Build.Engine
 
         public void ReportModelLoadInfo(FileAndType file, LoadPhase phase)
         {
-            ModelLoadInfo[file] = phase;
+            ModelLoadInfo[file.File] = phase;
         }
 
         public void ReportModelLoadInfo(IEnumerable<FileAndType> files, LoadPhase phase)
@@ -516,7 +516,7 @@ namespace Microsoft.DocAsCode.Build.Engine
                 phase,
                 f =>
                 {
-                    var key = ((TypeForwardedToRelativePath)f.File).GetPathFromWorkingFolder().ToString();
+                    var key = ((TypeForwardedToRelativePath)f).GetPathFromWorkingFolder().ToString();
                     return changes.Contains(key);
                 });
         }
@@ -526,7 +526,7 @@ namespace Microsoft.DocAsCode.Build.Engine
             ReloadUnloadedModelsPerCondition(phase, f => ModelLoadInfo[f] == LoadPhase.None);
         }
 
-        private void ReloadUnloadedModelsPerCondition(LoadPhase phase, Func<FileAndType, bool> condition)
+        private void ReloadUnloadedModelsPerCondition(LoadPhase phase, Func<string, bool> condition)
         {
             if (!CanIncrementalBuild)
             {
@@ -534,7 +534,7 @@ namespace Microsoft.DocAsCode.Build.Engine
             }
             var toLoadList = (from f in ModelLoadInfo.Keys
                               where condition(f)
-                              select LoadIntermediateModel(f.File, phase.ToString()) into m
+                              select LoadIntermediateModel(f, phase.ToString()) into m
                               where m != null
                               select m).ToList();
             if (toLoadList.Count > 0)
@@ -557,23 +557,23 @@ namespace Microsoft.DocAsCode.Build.Engine
                 IncrementalUtility.RetryIO(() =>
                 {
                     string fileName = IncrementalUtility.GetRandomEntry(IncrementalBaseDir);
-                    string key = GetIntermediateModelKey(pair.Key.File, phase);
+                    string key = GetIntermediateModelKey(pair.Key, phase);
                     if (pair.Value == LoadPhase.None)
                     {
                         if (LastIntermediateModelManifest == null)
                         {
-                            throw new BuildCacheException($"Full build hasn't loaded model {pair.Key.FullPath}");
+                            throw new BuildCacheException($"Full build hasn't loaded model {pair.Key}");
                         }
                         string lfn;
                         if (!LastIntermediateModelManifest.Models.TryGetValue(key, out lfn))
                         {
-                            throw new BuildCacheException($"Last build hasn't loaded model {pair.Key.FullPath} with phase {phase}.");
+                            throw new BuildCacheException($"Last build hasn't loaded model {pair.Key} with phase {phase}.");
                         }
                         File.Move(Path.Combine(LastIncrementalBaseDir, lfn), Path.Combine(IncrementalBaseDir, fileName));
                     }
                     else
                     {
-                        var modelKey = TypeForwardedToRelativePath.NormalizedWorkingFolder + pair.Key.File;
+                        var modelKey = TypeForwardedToRelativePath.NormalizedWorkingFolder + pair.Key;
                         var model = Models.Find(m => m.Key == modelKey);
                         using (var stream = File.Create(Path.Combine(IncrementalBaseDir, fileName)))
                         {
