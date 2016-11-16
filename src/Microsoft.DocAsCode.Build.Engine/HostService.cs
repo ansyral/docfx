@@ -47,7 +47,8 @@ namespace Microsoft.DocAsCode.Build.Engine
 
         public DependencyGraph DependencyGraph { get; set; }
 
-        public Dictionary<string, LoadPhase> ModelLoadInfo { get; } = new Dictionary<string, LoadPhase>();
+        // the mapping between the model's pathfromroot and the phase it is loaded at.
+        public Dictionary<string, BuildPhase?> ModelLoadInfo { get; } = new Dictionary<string, BuildPhase?>();
 
         public ModelManifest CurrentIntermediateModelManifest { get; set; }
 
@@ -493,12 +494,12 @@ namespace Microsoft.DocAsCode.Build.Engine
 
         #region Model Load Info
 
-        public void ReportModelLoadInfo(FileAndType file, LoadPhase phase)
+        public void ReportModelLoadInfo(FileAndType file, BuildPhase? phase)
         {
             ModelLoadInfo[file.File] = phase;
         }
 
-        public void ReportModelLoadInfo(IEnumerable<FileAndType> files, LoadPhase phase)
+        public void ReportModelLoadInfo(IEnumerable<FileAndType> files, BuildPhase? phase)
         {
             foreach (var f in files)
             {
@@ -506,7 +507,7 @@ namespace Microsoft.DocAsCode.Build.Engine
             }
         }
 
-        public void ReloadModelsPerIncrementalChanges(IEnumerable<string> changes, string intermediateFolder, LoadPhase phase)
+        public void ReloadModelsPerIncrementalChanges(IEnumerable<string> changes, string intermediateFolder, BuildPhase phase)
         {
             if (changes == null)
             {
@@ -521,12 +522,12 @@ namespace Microsoft.DocAsCode.Build.Engine
                 });
         }
 
-        public void ReloadUnloadedModels(LoadPhase phase)
+        public void ReloadUnloadedModels(BuildPhase phase)
         {
-            ReloadUnloadedModelsPerCondition(phase, f => ModelLoadInfo[f] == LoadPhase.None);
+            ReloadUnloadedModelsPerCondition(phase, f => ModelLoadInfo[f] == null);
         }
 
-        private void ReloadUnloadedModelsPerCondition(LoadPhase phase, Func<string, bool> condition)
+        private void ReloadUnloadedModelsPerCondition(BuildPhase phase, Func<string, bool> condition)
         {
             if (!CanIncrementalBuild)
             {
@@ -544,7 +545,7 @@ namespace Microsoft.DocAsCode.Build.Engine
             }
         }
 
-        public void SaveIntermediateModel(string phase)
+        public void SaveIntermediateModel(BuildPhase phase)
         {
             if (!ShouldTraceIncrementalInfo)
             {
@@ -557,8 +558,8 @@ namespace Microsoft.DocAsCode.Build.Engine
                 IncrementalUtility.RetryIO(() =>
                 {
                     string fileName = IncrementalUtility.GetRandomEntry(IncrementalBaseDir);
-                    string key = GetIntermediateModelKey(pair.Key, phase);
-                    if (pair.Value == LoadPhase.None)
+                    string key = GetIntermediateModelKey(pair.Key, phase.ToString());
+                    if (pair.Value == null)
                     {
                         if (LastIntermediateModelManifest == null)
                         {
@@ -727,13 +728,5 @@ namespace Microsoft.DocAsCode.Build.Engine
         }
 
         #endregion
-    }
-
-    internal enum LoadPhase
-    {
-        None,
-        PreBuild,
-        PostBuild,
-        PostPostBuild,
     }
 }

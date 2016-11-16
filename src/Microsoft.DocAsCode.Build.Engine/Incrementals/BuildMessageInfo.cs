@@ -6,6 +6,7 @@ namespace Microsoft.DocAsCode.Build.Engine.Incrementals
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.IO;
 
     using Microsoft.DocAsCode.Common;
     using Microsoft.DocAsCode.Plugins;
@@ -99,15 +100,15 @@ namespace Microsoft.DocAsCode.Build.Engine.Incrementals
             });
         }
 
-        public static BuildMessageInfo Load(string file)
+        public static BuildMessageInfo Load(TextReader reader)
         {
-            var logs = IncrementalUtility.LoadIntermediateFile<IDictionary<string, List<LogItem>>>(file);
+            var logs = JsonUtility.Deserialize<IDictionary<string, List<LogItem>>>(reader);
             return new BuildMessageInfo(logs);
         }
 
-        public void Save(string file)
+        public void Save(TextWriter writer)
         {
-            IncrementalUtility.SaveIntermediateFile<IDictionary<string, List<LogItem>>>(file, _logs);
+            JsonUtility.Serialize(writer, _logs);
         }
 
         private sealed class Listener : ILoggerListener

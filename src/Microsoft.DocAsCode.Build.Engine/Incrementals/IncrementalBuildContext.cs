@@ -33,7 +33,7 @@ namespace Microsoft.DocAsCode.Build.Engine.Incrementals
         }
 
         // the mapping from model's localpathfromroot to the model's loadphase
-        internal Dictionary<string, Dictionary<string, LoadPhase>> ModelLoadInfo { get; set; } = new Dictionary<string, Dictionary<string, LoadPhase>>();
+        internal Dictionary<string, Dictionary<string, BuildPhase?>> ModelLoadInfo { get; set; } = new Dictionary<string, Dictionary<string, BuildPhase?>>();
 
         internal List<ManifestItem> UnloadedManifestItems { get; set; } = new List<ManifestItem>();
 

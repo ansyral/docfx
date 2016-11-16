@@ -21,19 +21,19 @@ namespace Microsoft.DocAsCode.Build.Engine.Incrementals
             {
                 Name = DependencyTypeName.Include,
                 IsTransitive = true,
-                TriggerBuildPhase = TriggerBuildPhase.Build,
+                Phase = BuildPhase.Build,
             },
             new DependencyType
             {
                 Name = DependencyTypeName.Uid,
                 IsTransitive = false,
-                TriggerBuildPhase = TriggerBuildPhase.PostBuild,
+                Phase = BuildPhase.PostBuild,
             },
             new DependencyType
             {
                 Name = DependencyTypeName.File,
                 IsTransitive = false,
-                TriggerBuildPhase = TriggerBuildPhase.ApplyTemplates,
+                Phase = BuildPhase.ApplyTemplates,
             });
 
         private readonly HashSet<DependencyItem> _dependencyItems;
@@ -198,7 +198,7 @@ namespace Microsoft.DocAsCode.Build.Engine.Incrementals
             DependencyType stored;
             if (_types.TryGetValue(dt.Name, out stored))
             {
-                if (stored.TriggerBuildPhase != dt.TriggerBuildPhase || stored.IsTransitive != dt.IsTransitive)
+                if (stored.Phase != dt.Phase || stored.IsTransitive != dt.IsTransitive)
                 {
                     Logger.LogError($"Dependency type {JsonUtility.Serialize(dt)} isn't registered successfully because a different type with name {dt.Name} is already registered. Already registered one: {JsonUtility.Serialize(stored)}.");
                     throw new InvalidDataException($"A different dependency type with name {dt.Name} is already registered");
@@ -207,7 +207,7 @@ namespace Microsoft.DocAsCode.Build.Engine.Incrementals
                 return;
             }
             _types[dt.Name] = dt;
-            Logger.LogVerbose($"Dependency type is successfully registered. Name: {dt.Name}, IsTransitive: {dt.IsTransitive}, TriggerBuildPhase: {dt.TriggerBuildPhase}.");
+            Logger.LogVerbose($"Dependency type is successfully registered. Name: {dt.Name}, IsTransitive: {dt.IsTransitive}, TriggerBuildPhase: {dt.Phase}.");
         }
 
         private void ReportDependencyCore(DependencyItem dependency)

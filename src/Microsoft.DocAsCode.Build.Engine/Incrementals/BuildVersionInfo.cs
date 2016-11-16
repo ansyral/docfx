@@ -47,7 +47,7 @@ namespace Microsoft.DocAsCode.Build.Engine.Incrementals
         /// </summary>
         public string XRefSpecMapFile { get; set; }
         /// <summary>
-        /// The file link for the build message file (type is <see cref="BuildMessageInfo"/>).
+        /// The file link for the build message file (type is <see cref="BuildMessage"/>).
         /// </summary>
         public string BuildMessageFile { get; set; }
 
@@ -81,7 +81,7 @@ namespace Microsoft.DocAsCode.Build.Engine.Incrementals
         /// deserialized build messages.
         /// </summary>
         [JsonIgnore]
-        public BuildMessageInfo BuildMessage { get; set; } = new BuildMessageInfo();
+        public BuildMessage BuildMessage { get; set; } = new BuildMessage();
         #endregion
 
         internal void Load(string baseDir)
@@ -90,7 +90,7 @@ namespace Microsoft.DocAsCode.Build.Engine.Incrementals
             Attributes = IncrementalUtility.LoadIntermediateFile<IDictionary<string, FileAttributeItem>>(Path.Combine(baseDir, AttributesFile));
             BuildOutputs = IncrementalUtility.LoadIntermediateFile<BuildOutputs>(Path.Combine(baseDir, OutputFile));
             Manifest = IncrementalUtility.LoadIntermediateFile<IEnumerable<ManifestItem>>(Path.Combine(baseDir, ManifestFile));
-            BuildMessage = BuildMessageInfo.Load(Path.Combine(baseDir, BuildMessageFile));
+            BuildMessage = IncrementalUtility.LoadBuildMessage(Path.Combine(baseDir, BuildMessageFile));
             foreach (var processor in Processors)
             {
                 processor.Load(baseDir);
@@ -103,7 +103,7 @@ namespace Microsoft.DocAsCode.Build.Engine.Incrementals
             IncrementalUtility.SaveIntermediateFile(Path.Combine(baseDir, AttributesFile), Attributes);
             IncrementalUtility.SaveIntermediateFile(Path.Combine(baseDir, OutputFile), BuildOutputs);
             IncrementalUtility.SaveIntermediateFile(Path.Combine(baseDir, ManifestFile), Manifest);
-            BuildMessage.Save(Path.Combine(baseDir, BuildMessageFile));
+            IncrementalUtility.SaveBuildMessage(Path.Combine(baseDir, BuildMessageFile), BuildMessage);
             foreach (var processor in Processors)
             {
                 processor.Save(baseDir);
