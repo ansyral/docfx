@@ -1,23 +1,19 @@
-﻿namespace Microsoft.DocAsCode.Build.Engine.Incrementals
+﻿// Copyright (c) Microsoft. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
+
+namespace Microsoft.DocAsCode.Build.Engine.Incrementals
 {
     using System;
 
-    using Microsoft.DocAsCode.Common;
-
     using Newtonsoft.Json;
 
-    public class DependencyItemSourceInfo : IEquatable<DependencyItemSourceInfo>
+    public abstract class DependencyItemSourceInfo : IDependencyItemSourceInfo, IEquatable<DependencyItemSourceInfo>
     {
-        private StringComparer Comparer
-        {
-            get
-            {
-                return SourceType == DependencyItemSourceType.File ? FilePathComparer.OSPlatformSensitiveStringComparer : StringComparer.Ordinal;
-            }
-        }
+        [JsonIgnore]
+        public abstract StringComparer ValueComparer { get; }
 
         [JsonProperty("sourceType")]
-        public DependencyItemSourceType SourceType { get; set; }
+        public abstract DependencyItemSourceType SourceType { get; }
 
         [JsonProperty("value")]
         public string Value { get; set; }
@@ -42,7 +38,7 @@
             {
                 return true;
             }
-            return Comparer.Equals(Value, other.Value) &&
+            return ValueComparer.Equals(Value, other.Value) &&
                 SourceType == other.SourceType;
         }
 
@@ -58,12 +54,7 @@
 
         public override int GetHashCode()
         {
-            return Comparer.GetHashCode(Value) ^ (SourceType.GetHashCode() >> 1);
-        }
-
-        public static implicit operator DependencyItemSourceInfo(string info)
-        {
-            return info == null ? null : new DependencyItemSourceInfo { Value = info, SourceType = DependencyItemSourceType.File };
+            return ValueComparer.GetHashCode(Value) ^ (SourceType.GetHashCode() >> 1);
         }
     }
 
